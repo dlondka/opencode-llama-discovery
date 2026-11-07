@@ -22,6 +22,7 @@ const FALLBACK_CONTEXT_LIMIT = 8192
 const REQUEST_TIMEOUT_MS = 1_500
 
 type Options = {
+  readonly apiKey?: unknown
   readonly baseURL?: unknown
   readonly outputLimit?: unknown
   readonly pollInterval?: unknown
@@ -201,6 +202,7 @@ async function setup(ctx: Context): Promise<() => Promise<void>> {
   const outputLimit = positiveInt(raw.outputLimit, DEFAULT_OUTPUT_LIMIT)
   const pollInterval = Math.max(MIN_POLL_INTERVAL, positiveInt(raw.pollInterval, DEFAULT_POLL_INTERVAL))
   const tools = raw.tools !== false
+  const apiKey = typeof raw.apiKey === "string" && raw.apiKey.trim() !== "" ? raw.apiKey.trim() : undefined
   const options: NormalizedOptions = { outputLimit, tools }
 
   let inventory: DiscoveredModel[] = []
@@ -224,7 +226,10 @@ async function setup(ctx: Context): Promise<() => Promise<void>> {
       // The host normalizes this to the bundled
       // `@opencode/ai/providers/openai-compatible` package.
       provider.package = "@ai-sdk/openai-compatible"
-      provider.settings = { baseURL: `${root}/v1` }
+      provider.settings = {
+        baseURL: `${root}/v1`,
+        ...(apiKey ? { apiKey } : {}),
+      }
       provider.canonical = undefined
       provider.integrationID = undefined
     })
@@ -241,9 +246,15 @@ async function setup(ctx: Context): Promise<() => Promise<void>> {
     try {
       const response = await fetch(`${root}/v1/models`, {
         signal: controller.signal,
-        headers: { accept: "application/json" },
+        headers: {
+          accept: "application/json",
+          ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
+        },
       })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      if (!response.ok) {
+        const hint = response.status === 401 || response.status === 403 ? " (check apiKey)" : ""
+        throw new Error(`HTTP ${response.status}${hint}`)
+      }
       const payload: unknown = await response.json()
       if (stopped) return
 
@@ -277,7 +288,9 @@ async function setup(ctx: Context): Promise<() => Promise<void>> {
     }
   }
 
-  console.log(`[llamacpp-discovery] starting; server ${root}, poll ${pollInterval}ms`)
+  console.log(
+    `[llamacpp-discovery] starting; server ${root}, poll ${pollInterval}ms, auth ${apiKey ? "enabled" : "disabled"}`,
+  )
   await refresh()
   const interval = setInterval(() => {
     void refresh()

@@ -3,9 +3,6 @@
   "version": "1.0.0",
   "description": "Standalone opencode plugin that discovers models from a running llama-server",
   "private": true,
-  "directories": {
-    "doc": "docs"
-  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "typecheck": "tsc --noEmit"
